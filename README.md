@@ -20,7 +20,7 @@ The server reads Google data with a service account.
 - `GA4_PROPERTY_ID`, `GSC_SITE_URL` — optional defaults (e.g. `sc-domain:gramodesky.cz`)
 - `FASTMCP_HOME` — `/data`. Mount a persistent volume there.
 
-If `GOOGLE_OAUTH_CLIENT_ID` is not set, the server starts without auth. Use this only locally.
+If `GOOGLE_OAUTH_CLIENT_ID` is not set, the server does not start. For a local run without auth, set `ALLOW_NO_AUTH=1`.
 
 ## Google setup
 

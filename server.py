@@ -52,8 +52,12 @@ class AllowlistVerifier(GoogleTokenVerifier):
         return result
 
 
-def build_auth() -> GoogleProvider:
-    client_id = os.environ["GOOGLE_OAUTH_CLIENT_ID"]
+def build_auth() -> GoogleProvider | None:
+    client_id = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+    if not client_id:
+        if os.environ.get("ALLOW_NO_AUTH") == "1":
+            return None
+        raise SystemExit("GOOGLE_OAUTH_CLIENT_ID is not set. Set ALLOW_NO_AUTH=1 only for local runs.")
     provider = GoogleProvider(
         client_id=client_id,
         client_secret=os.environ["GOOGLE_OAUTH_CLIENT_SECRET"],
@@ -79,7 +83,7 @@ mcp = FastMCP(
         "Call ga4_list_properties or gsc_list_sites first if you do not know the IDs. "
         "Dates use YYYY-MM-DD or GA4 relative values (today, yesterday, 28daysAgo)."
     ),
-    auth=build_auth() if os.environ.get("GOOGLE_OAUTH_CLIENT_ID") else None,
+    auth=build_auth(),
 )
 
 
