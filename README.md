@@ -1,0 +1,39 @@
+# analytics-mcp-http
+
+Read-only remote MCP server for Google Analytics 4 and Google Search Console (Streamable HTTP, FastMCP).
+
+Users sign in with Google. Only e-mails in `ALLOWED_EMAILS` can call tools.
+The server reads Google data with a service account.
+
+## Tools
+
+- `ga4_list_properties`, `ga4_run_report`, `ga4_run_realtime_report`, `ga4_get_metadata`
+- `gsc_list_sites`, `gsc_search_analytics`, `gsc_inspect_url`, `gsc_list_sitemaps`
+
+## Env
+
+- `GOOGLE_SA_JSON` — full JSON key of the service account (secret)
+- `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` — Google OAuth client (Web application)
+- `BASE_URL` — public URL, e.g. `https://analytics-mcp.gramodesky.cz`
+- `JWT_SIGNING_KEY` — random secret for the tokens that the server gives to MCP clients
+- `ALLOWED_EMAILS` — comma-separated list of Google e-mails
+- `GA4_PROPERTY_ID`, `GSC_SITE_URL` — optional defaults (e.g. `sc-domain:gramodesky.cz`)
+- `FASTMCP_HOME` — `/data`. Mount a persistent volume there.
+
+If `GOOGLE_OAUTH_CLIENT_ID` is not set, the server starts without auth. Use this only locally.
+
+## Google setup
+
+1. Enable Analytics Data API, Analytics Admin API and Search Console API.
+2. Add the service account e-mail to GA4 (Viewer) and to Search Console (Restricted).
+3. OAuth client redirect URI: `https://analytics-mcp.gramodesky.cz/auth/callback`
+
+## Endpoints
+
+- `GET /health` — healthcheck
+- `/mcp` — MCP Streamable HTTP (OAuth)
+
+## Clients
+
+- Claude: Settings → Connectors → Add custom connector → `https://analytics-mcp.gramodesky.cz/mcp`
+- Cursor: `.cursor/mcp.json` → `{"mcpServers": {"analytics": {"url": "https://analytics-mcp.gramodesky.cz/mcp"}}}`
