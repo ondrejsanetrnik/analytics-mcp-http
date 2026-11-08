@@ -1,6 +1,6 @@
 # analytics-mcp-http
 
-Read-only remote MCP server for Google Analytics 4 and Google Search Console (Streamable HTTP, FastMCP).
+Read-only remote MCP server for Google Analytics 4, Google Search Console and Google Tag Manager (Streamable HTTP, FastMCP).
 
 Users sign in with Google. Only e-mails in `ALLOWED_EMAILS` can call tools.
 The server reads Google data with a service account.
@@ -9,6 +9,7 @@ The server reads Google data with a service account.
 
 - `ga4_list_properties`, `ga4_run_report`, `ga4_run_realtime_report`, `ga4_get_metadata`
 - `gsc_list_sites`, `gsc_search_analytics`, `gsc_inspect_url`, `gsc_list_sitemaps`
+- `gtm_list_containers`, `gtm_get_live_version`, `gtm_list_versions`, `gtm_get_version`, `gtm_get_workspace_changes`
 
 ## Env
 
@@ -24,8 +25,9 @@ If `GOOGLE_OAUTH_CLIENT_ID` is not set, the server does not start. For a local r
 
 ## Google setup
 
-1. Enable Analytics Data API, Analytics Admin API and Search Console API.
+1. Enable Analytics Data API, Analytics Admin API, Search Console API and Tag Manager API.
 2. Add the service account e-mail to GA4 (Viewer) and to Search Console (Restricted).
+   In each GTM account, add it in Admin → User Management with account access "User" and container access "Read".
 3. OAuth client redirect URI: `https://analytics-mcp.gramodesky.cz/auth/callback`
 
 ## Endpoints
