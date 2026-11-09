@@ -31,7 +31,12 @@ SCOPES = [
     "https://www.googleapis.com/auth/analytics.readonly",
     "https://www.googleapis.com/auth/webmasters.readonly",
     "https://www.googleapis.com/auth/tagmanager.readonly",
+    "https://www.googleapis.com/auth/tagmanager.edit.containers",
 ]
+
+# The server can only edit workspaces that it made itself. It has no publish or version tool,
+# so a person must review and publish each change in the GTM UI.
+GTM_WORKSPACE_PREFIX = "MCP: "
 
 ALLOWED_EMAILS = {
     e.strip().lower() for e in os.environ.get("ALLOWED_EMAILS", "").split(",") if e.strip()
@@ -81,7 +86,8 @@ mcp = FastMCP(
     "gramodesky-analytics",
     instructions=(
         "Read-only access to Google Analytics 4 (ga4_* tools), Google Search Console (gsc_* tools) "
-        "and Google Tag Manager (gtm_* tools). "
+        "and Google Tag Manager (gtm_* tools). GTM write tools only edit workspaces named 'MCP: ...' "
+        "and cannot publish: a person publishes in the GTM UI. "
         "Call ga4_list_properties, gsc_list_sites or gtm_list_containers first if you do not know the IDs. "
         "Dates use YYYY-MM-DD or GA4 relative values (today, yesterday, 28daysAgo)."
     ),
@@ -441,6 +447,86 @@ def gtm_get_workspace_changes(
             changes.append({"status": change.get("changeStatus"), "kind": kind, "name": entity.get("name")})
         result.append({"workspace": ws.get("name"), "changes": changes, "conflicts": len(status.get("mergeConflict", []))})
     return result
+
+
+def gtm_own_workspace(workspace_path: str) -> dict:
+    ws = gtm_call(gtm().accounts().containers().workspaces().get(path=workspace_path))
+    if not ws.get("name", "").startswith(GTM_WORKSPACE_PREFIX):
+        raise ToolError(f"Only workspaces named '{GTM_WORKSPACE_PREFIX}...' can be edited. Use gtm_create_workspace.")
+    return ws
+
+
+def gtm_find_tag(workspace_path: str, tag: str) -> dict:
+    tags = gtm_call(gtm().accounts().containers().workspaces().tags().list(parent=workspace_path)).get("tag", [])
+    for t in tags:
+        if tag in (t.get("tagId"), t.get("name")):
+            return t
+    raise ToolError(f"Tag {tag} not found in the workspace.")
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+def gtm_get_workspace(
+    workspace_path: Annotated[str, Field(description="accounts/<id>/containers/<id>/workspaces/<id>")],
+) -> dict:
+    """Show the current tags, triggers and variables of a workspace (with unpublished changes)."""
+    ws = gtm().accounts().containers().workspaces()
+    data = {
+        "tag": gtm_call(ws.tags().list(parent=workspace_path)).get("tag", []),
+        "trigger": gtm_call(ws.triggers().list(parent=workspace_path)).get("trigger", []),
+        "variable": gtm_call(ws.variables().list(parent=workspace_path)).get("variable", []),
+    }
+    summary = gtm_summary(data, False)
+    for tag, raw in zip(summary["tags"], data["tag"]):
+        tag["tag_id"] = raw.get("tagId")
+    return summary
+
+
+@mcp.tool(annotations={"destructiveHint": False})
+def gtm_create_workspace(
+    container: Annotated[str, Field(description="Public ID (GTM-XXXX) or API path")],
+    name: Annotated[str, Field(description="Short name. The server adds the prefix 'MCP: '.")],
+    description: str = "",
+) -> dict:
+    """Create a new workspace for a change. Nothing is published."""
+    body = {"name": GTM_WORKSPACE_PREFIX + name, "description": description}
+    ws = gtm_call(gtm().accounts().containers().workspaces().create(parent=gtm_container_path(container), body=body))
+    return {"workspace_path": ws["path"], "name": ws["name"]}
+
+
+@mcp.tool(annotations={"destructiveHint": False})
+def gtm_set_tag_parameter(
+    workspace_path: Annotated[str, Field(description="Path of an 'MCP: ...' workspace")],
+    tag: Annotated[str, Field(description="Tag ID or exact tag name")],
+    key: Annotated[str, Field(description="Parameter key, e.g. tagId or measurementIdOverride")],
+    value: str,
+) -> dict:
+    """Set one simple (template) parameter of a tag in an MCP workspace. Nothing is published."""
+    gtm_own_workspace(workspace_path)
+    t = gtm_find_tag(workspace_path, tag)
+    params = t.setdefault("parameter", [])
+    old = next((p for p in params if p.get("key") == key), None)
+    if old and old.get("type") not in ("template", "integer", "boolean"):
+        raise ToolError(f"Parameter {key} has type {old.get('type')}. Only simple parameters can be set.")
+    previous = old.get("value") if old else None
+    if old:
+        old["value"] = value
+    else:
+        params.append({"type": "template", "key": key, "value": value})
+    updated = gtm_call(gtm().accounts().containers().workspaces().tags().update(
+        path=t["path"], fingerprint=t.get("fingerprint"), body=t,
+    ))
+    return {"tag": updated.get("name"), "key": key, "previous": previous, "value": value}
+
+
+@mcp.tool(annotations={"destructiveHint": False})
+def gtm_create_tag(
+    workspace_path: Annotated[str, Field(description="Path of an 'MCP: ...' workspace")],
+    tag: Annotated[dict, Field(description="GTM REST Tag body, e.g. {\"name\": \"Google tag\", \"type\": \"googtag\", \"parameter\": [{\"type\": \"template\", \"key\": \"tagId\", \"value\": \"G-XXXX\"}], \"firingTriggerId\": [\"2147479572\"]}")],
+) -> dict:
+    """Create a tag in an MCP workspace. Nothing is published."""
+    gtm_own_workspace(workspace_path)
+    created = gtm_call(gtm().accounts().containers().workspaces().tags().create(parent=workspace_path, body=tag))
+    return {"tag_id": created.get("tagId"), "name": created.get("name")}
 
 
 if __name__ == "__main__":
